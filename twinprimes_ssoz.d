@@ -3,6 +3,9 @@
  * This is a D port of the Nim program twinprimes_ssoz.nim:
  * https://gist.github.com/jzakiya/6c7e1868bd749a6b1add62e3e3b2341e
  *
+ * This D source file, and subsequent modifications, can be found here:
+ * https://gist.github.com/jzakiya/ae93bfa03dbc8b25ccc7f97ff8ad0f61
+ *
  * To compile with ldc2: $ ldc2 --release -O3 twinprimes_ssoz.d
  *
  * Then run executable: $ ./twinprimes_ssoz <cr>, and enter value for N.
@@ -140,9 +143,9 @@ void selectPg(ulong num) {
     bn = 64;
   } else /*if (num < 15_000_000_000_000uL)*/ {
     pgParameters = parametersp13;
-    if      (num > 7_000_000_000_000uL) { bn = 384;}
-    else if (num > 2_500_000_000_000uL) { bn = 320;}
-    else if (num >   250_000_000_000uL) { bn = 196;}
+    if      (num > 7_000_000_000_000uL) { bn = 384; }
+    else if (num > 2_500_000_000_000uL) { bn = 320; }
+    else if (num >   250_000_000_000uL) { bn = 196; }
     else {bn = 96;}
     }
   /* else {
