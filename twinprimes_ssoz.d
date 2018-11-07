@@ -229,7 +229,7 @@ void printprms(uint Kn, ulong Ki, uint indx, ubyte[] seg) {
         write(modk + res - 1, " "); // print twinprime mid val on a line
       }
     }
-    modk += pgParameters.modulus;   // set base value for next resgroup
+    modk += modpg;                  // set base value for next resgroup
   }
 }
 */
