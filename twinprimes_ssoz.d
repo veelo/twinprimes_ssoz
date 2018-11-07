@@ -246,7 +246,7 @@ ulong[] nextp_init(int indx, ulong[] nextp) {
   foreach(size_t j, prime; primes) {     // for each primes r1..sqrt(N)
     auto k = (prime - 2) / modpg;        // find its resgroup
     auto r = (prime - 2) % modpg + 2;    // and its residue value
-    auto r_inv = resinvrs[pos[r - 2]];   // and residue inv
+    auto r_inv = resinvrs[pos[r - 2]];   // and residue inverse
     auto ri = (r_lo * r_inv - 2) % modpg + 2; // compute ri for r
     nextp[row_lo + j] = k * (prime + ri) + (r * ri - 2) / modpg;
     ri = (r_hi * r_inv - 2) % modpg + 2; // compute ri for r
