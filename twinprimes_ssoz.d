@@ -79,7 +79,7 @@ PgParameters genPgParameters(int prime)() {
   residues = sort(residues).array;
   residues ~= modpg - 1;
   residues ~= modpg + 1;
-  size_t rescnt = residues.length;  // PG's residues count
+  auto rescnt = residues.length;    // PG's residues count
 
   // Extract upper twinpair residues here.
   uint[] restwins;
@@ -88,7 +88,7 @@ PgParameters genPgParameters(int prime)() {
     if (residues[j] + 2 == residues[j + 1]) {restwins ~= residues[j + 1]; ++j;}
     ++j;
   }
-  size_t twinpairs = restwins.length;  // twinpairs count
+  auto twinpairs = restwins.length; // twinpairs count
 
   // Create PG's residues inverses here.
   uint[] inverses;
@@ -116,6 +116,12 @@ shared ulong[] lastwins;      // Holds last twin <= num in each thread
 shared uint[] pos;            // Convert residue val to its residues index val
                               // faster than `residues.find(residue)
 shared PgParameters pgParameters;
+shared uint modpg;            // PG's modulus value
+shared uint rescnt;           // PG's residues count
+shared uint pairscnt;         // PG's twinpairs count
+shared uint[] residues;       // PS's list of residues
+shared uint[] restwins;       // PG's list of twinpair residues
+shared uint[] resinvrs;       // PG's list of residues inverses
 shared uint bn;               // Segment size factor for PG and input number
 
 /**
@@ -145,12 +151,18 @@ void selectPg(ulong num) {
     pgParameters = parametersp13;
     bn = 384;
   }*/
-  cnts = new uint[](pgParameters.twinPairsCount);      // twinprime sums for seg bytes
-  pos  = new uint[](pgParameters.modulus);             // Create modpg size array to
-  foreach(i; 0 .. pgParameters.residueCount) {
-    pos[pgParameters.residues[i] - 2] = cast(uint) i;  // Convert residue val -> indx
-  }
-  lastwins = new ulong[](pgParameters.twinPairsCount); // Holds last twin per thread.
+  // Initialize parameters for selected PG.
+  modpg    = pgParameters.modulus;
+  rescnt   = cast(uint) pgParameters.residueCount;
+  pairscnt = cast(uint) pgParameters.twinPairsCount;
+  residues = pgParameters.residues;
+  restwins = pgParameters.residueTwinPairs;
+  resinvrs = pgParameters.residueInverses;
+  cnts = new uint[](pairscnt);            // twinprime sums for seg bytes
+  pos  = new uint[](modpg);               // create modpg size array to
+  foreach(i; 0 .. rescnt)                 // for each residue
+    pos[residues[i] - 2] = cast(uint) i;  // convert residue val -> indx
+  lastwins = new ulong[](pairscnt);       // Holds last twin per thread
 }
 
 /**
@@ -160,9 +172,9 @@ void selectPg(ulong num) {
  * Any algorithm (fast|small) is usable. Here the SoZ for the PG is used.
  */
 void sozPg(ulong val) {
-  uint md = pgParameters.modulus;                   // PG's modulus value
-  ulong rscnt = pgParameters.residueCount;          // PG's residue count
-  shared const(uint[]) res = pgParameters.residues; // PG's residues list
+  uint md = modpg;                  // PG's modulus value
+  ulong rscnt = rescnt;             // PG's residue count
+  shared const(uint[]) res = residues; // PG's residues list
 
   ulong num = (val - 1) | 1;        // if val even then subtract 1
   ulong k = num / md;               // compute its residue group value
@@ -206,8 +218,8 @@ void sozPg(ulong val) {
  * Print twinprimes for given twinpair for given segment slice.
  * Primes will not be displayed in sorted order, collect|sort later for that.
 void printprms(uint Kn, ulong Ki, uint indx, ubyte[] seg) {
-  ulong modk = Ki * pgParameters.modulus; // base val of 1st resgroup in slice
-  uint res = pgParameters.residueTwinPairs[indx]; // for hi tp residue value
+  ulong modk = Ki * modpg;          // base val of 1st resgroup in slice
+  uint res = restwins[indx];        // for hi tp residue value
   foreach (k; in 0 .. Kn {          // for each of Kn resgroups in slice
     if (seg[k] == 0) {              // if seg byte for resgroup has twinprime
       if (modk + res <= num) {      // and if upper twinprime <= num
@@ -224,18 +236,18 @@ void printprms(uint Kn, ulong Ki, uint indx, ubyte[] seg) {
  * init each col w/1st prime multiple resgroup for the primes r1..sqrt(N).
  */
 ulong[] nextp_init(int indx, ulong[] nextp) {
-  uint r_hi = pgParameters.residueTwinPairs[indx];  // upper twinpair value
+  uint r_hi = restwins[indx];            // upper twinpair value
   uint r_lo = r_hi - 2;                  // lower twinpair value
   uint row_lo = 0;                       // nextp addr for lower twinpair
   uint row_hi = pcnt;                    // nextp addr for upper twinpair
   foreach(size_t j, prime; primes) {     // for each primes r1..sqrt(N)
-    auto k = (prime - 2) / pgParameters.modulus;      // find its resgroup
-    auto r = (prime - 2) % pgParameters.modulus + 2;  // and its residue value
-    auto r_inv = pgParameters.residueInverses[pos[r - 2]];   // and residue inv
-    auto ri = (r_lo * r_inv - 2) % pgParameters.modulus + 2; // compute ri for r
-    nextp[row_lo + j] = k * (prime + ri) + (r * ri - 2) / pgParameters.modulus;
-    ri = (r_hi * r_inv - 2) % pgParameters.modulus + 2; // compute ri for r
-    nextp[row_hi + j] = k * (prime + ri) + (r * ri - 2) / pgParameters.modulus;
+    auto k = (prime - 2) / modpg;        // find its resgroup
+    auto r = (prime - 2) % modpg + 2;    // and its residue value
+    auto r_inv = resinvrs[pos[r - 2]];   // and residue inv
+    auto ri = (r_lo * r_inv - 2) % modpg + 2; // compute ri for r
+    nextp[row_lo + j] = k * (prime + ri) + (r * ri - 2) / modpg;
+    ri = (r_hi * r_inv - 2) % modpg + 2; // compute ri for r
+    nextp[row_hi + j] = k * (prime + ri) + (r * ri - 2) / modpg;
   }
   return nextp;
 }
@@ -282,8 +294,8 @@ void twinsSieve(ulong Kmax, uint indx) {
       foreach (k; 1 .. Kn + 1)         // find location of largest twin prime
         if (seg[Kn - k] == 0) {upk = Kn - k; break;} // count down to largest tp
       lastwins[indx] = hi_tp;          // store hi_tp from previous segment
-      ulong modk = (Ki + upk) * pgParameters.modulus;     // modk for largest tp
-      hi_tp = modk + pgParameters.residueTwinPairs[indx]; // largest hi seg tp
+      ulong modk = (Ki + upk) * modpg; // modk for largest tp
+      hi_tp = modk + restwins[indx];   // largest hi seg tp
     }
     // printprms(Kn, Ki, indx, seg)    // display twinprimes for this twinpair
     Ki += kb;                          // set 1st resgroup val of next seg slice
@@ -294,7 +306,7 @@ void twinsSieve(ulong Kmax, uint indx) {
       if (seg[upk - k] == 0) {         // if twin prime at seg resgroup address
           if (hi_tp <= num) {lastwins[indx] = hi_tp; break;} // store if in range
           --sum; }                     // else reduce sum for too large twin 
-      hi_tp -= pgParameters.modulus;   // then check next lower twin pair hi val
+      hi_tp -= modpg;                  // then check next lower twin pair hi val
     }
   }
   else {lastwins[indx] = hi_tp;}       // store unadjusted final seg hi_tp value
@@ -306,7 +318,7 @@ void twinsSieve(ulong Kmax, uint indx) {
  * Then add segs twin primes sums from each twin pair thread to 'twinscnt'.
  */
 void segsieve(ulong Kmax) {
-  foreach (indx; parallel(iota(0, pgParameters.twinPairsCount))) {
+  foreach (indx; parallel(iota(0, pairscnt))) {
     twinsSieve(Kmax, cast(uint) indx); // sieve a selected twinpair restracks
   }
   foreach (sum; cnts) twinscnt = twinscnt + sum; // update twinscnt w/seg sums
@@ -327,10 +339,10 @@ void twinPrimesSsoz() {
 
   num = val - 1 |  1;     // if val even subtract 1
   selectPg(num);          // select PG and seg factor for input number
-  auto k = num / pgParameters.modulus;  // compute its resgroup
-  auto modk = pgParameters.modulus * k; // compute its base num
-  auto Kmax = (num - 2) / pgParameters.modulus + 1;  // max num of resgroups
-  auto b = bn * 1024;    // set seg size to optimize for selected PG
+  auto k = num / modpg;   // compute its resgroup
+  auto modk = modpg * k;  // compute its base num
+  auto Kmax = (num - 2) / modpg + 1;  // max num of resgroups
+  auto b = bn * 1024;     // set seg size to optimize for selected PG
   kb = cast(uint)(Kmax < b ? Kmax + 1 : b);  // min num of segment resgroups
 
   writeln("each thread segment is [", 1, " x ", kb, "] bytes array");
@@ -339,22 +351,22 @@ void twinPrimesSsoz() {
   // to determine the 'efficiency' of the used PG: (num of primes)/(num of pcs)
   // The closer the ratio is to '1' the higher the PG's 'efficiency'.
   uint r = 0;            // from first residue in last resgroup
-  while (num >= modk + pgParameters.residueTwinPairs[r]) ++r;  // find last tp index <= num
+  while (num >= modk + restwins[r]) ++r;  // find last tp index <= num
 
-  auto maxpairs = k * pgParameters.twinPairsCount + r;  // maximum number of twinpairs <= num
+  auto maxpairs = k * pairscnt + r;       // maximum number of twinpairs <= num
 
   writeln("twinprime candidates = ", maxpairs, "; resgroups = ", Kmax);
 
-  sozPg(cast(ulong) sqrt(cast(double) num));  // compute pcnt and primes <= sqrt(num)
+  sozPg(cast(ulong) sqrt(cast(double) num)); // compute pcnt|primes <= sqrt(num)
 
-  writeln("each ", pgParameters.twinPairsCount, " threads has nextp[", 2, " x ", pcnt, "] array");
+  writeln("each ", pairscnt, " threads has nextp[", 2, " x ", pcnt, "] array");
   stopWatchSetup.stop();  // sieve setup time
   writeln("setup time = ", stopWatchSetup.peek);
 
   // 1st 4 twinprime counts
-  if (pgParameters.modulus > 30030)     { twinscnt = 4; }
-    else if(pgParameters.modulus > 210) { twinscnt = 3; }
-    else                                { twinscnt = 2; }
+  if      (modpg > 30030) { twinscnt = 4; }
+  else if (modpg > 210)   { twinscnt = 3; }
+  else                    { twinscnt = 2; }
   writeln("perform twinprimes ssoz sieve"); // start doing ssoz now
 
   auto stopWatchExecution = StopWatch();  // start timing ssoz sieve execution
