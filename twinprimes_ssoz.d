@@ -23,20 +23,17 @@
  */
 module twinprimes_ssoz;
 
-import std.algorithm : maxElement, min, sort, swap;
-import std.array : array;
-import std.typecons : Rebindable;
-import std.conv : to;
+import std.algorithm : maxElement, min;
 import std.datetime.stopwatch : StopWatch;
-import std.math;
-import std.numeric : gcd;
+import std.math : sqrt;
 import std.parallelism : parallel, totalCPUs;
 import std.range : iota;
 import std.stdio : readf, write, writeln;
 
 /// Compute modular inverse a^-1 of a to base b, e.g. a*(a^-1) mod b = 1.
-int modInv(int a0, int b0) pure
+int modInv(int a0, int b0) pure @nogc
 {
+  import std.algorithm : swap;
   int a = a0;
   int b = b0;
   int x0 = 0;
@@ -56,8 +53,6 @@ int modInv(int a0, int b0) pure
 /// Prime Generator Parameters
 struct PgParameters {
   uint modulus;
-  size_t residueCount;
-  size_t twinPairsCount;
   uint[] residues;
   uint[] residueTwinPairs;
   uint[] residueInverses;
@@ -66,15 +61,50 @@ struct PgParameters {
 /// Creates constant parameters for given PrimeGenerator at compile time.
 PgParameters genPgParameters(int prime) pure
 {
-  //pragma(msg, "generating parameters for P", prime);
-  uint[] primes = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+  assert(__ctfe);
+  static immutable primes = [2, 3, 5, 7, 11, 13, 17, 19, 23];
 
   // Compute PG's modulus.
-  uint modpg = 1;
-  foreach (prm; primes) { modpg *= prm; if (prm == prime) break; }
+  uint modulusPg()
+  {
+    uint result = 1;
+    foreach (prm; primes) { result *= prm; if (prm == prime) break; }
+    return result;
+  }
+  immutable uint modpg = modulusPg;
+
+  import std.algorithm : sort;
+  import std.numeric : gcd;
+  import std.array: appender;
+
+  // Preallocate memory.
+  auto residues = appender!(uint[]);
+  auto restwins = appender!(uint[]);
+  switch (prime) {
+    case 2: .. case 5:
+      residues.reserve(8);
+      restwins.reserve(3);
+      break;
+    case 7:
+      residues.reserve(48);
+      restwins.reserve(15);
+      break;
+    case 11:
+      residues.reserve(480);
+      restwins.reserve(135);
+      break;
+    case 13:
+      residues.reserve(5760);
+      restwins.reserve(1485);
+      break;
+    case 17:
+    default:
+      residues.reserve(92160);
+      restwins.reserve(22275);
+      break;
+  }
 
   // Generate PG's residue values.
-  uint[] residues;
   uint pc  = 5;
   uint inc = 2;
   while (pc < modpg / 2) {
@@ -82,34 +112,50 @@ PgParameters genPgParameters(int prime) pure
     pc += inc;
     inc = inc ^ 0b110;
   }
-  residues = sort(residues).array;
+  residues.data.sort;
   residues ~= modpg - 1;
   residues ~= modpg + 1;
-  auto rescnt = residues.length;    // PG's residues count
 
   // Extract upper twinpair residues here.
-  uint[] restwins;
   uint j = 0;
-  while (j < rescnt - 1) {
-    if (residues[j] + 2 == residues[j + 1]) {restwins ~= residues[j + 1]; ++j;}
+  while (j < residues.data.length - 1) {
+    if (residues.data[j] + 2 == residues.data[j + 1]) restwins ~= residues.data[++j];
     ++j;
   }
-  auto twinpairs = restwins.length; // twinpairs count
 
   // Create PG's residues inverses here.
-  uint[] inverses;
-  foreach (res; residues) {inverses ~= modInv(res, modpg);}
+  uint[] inverses = new uint[residues.data.length];
+  foreach (i, res; residues.data) {inverses[i] = modInv(res, modpg);}
 
-  return PgParameters(modpg, rescnt, twinpairs, residues, restwins, inverses);
+  return PgParameters(modpg, residues.data, restwins.data, inverses);
 }
 
 // Generate at compile time the parameters for PGs.
 enum parametersp5  = genPgParameters(5);
+pragma(msg, "prime 5 has modulus ", 
+            parametersp5.modulus, ", ",
+            parametersp5.residues.length, " residues and ",
+            parametersp5.residueTwinPairs.length, " twin pairs.");
 enum parametersp7  = genPgParameters(7);
+pragma(msg, "prime 7 has modulus ", 
+            parametersp5.modulus, ", ",
+            parametersp5.residues.length, " residues and ",
+            parametersp5.residueTwinPairs.length, " twin pairs.");
 enum parametersp11 = genPgParameters(11);
+pragma(msg, "prime 11 has modulus ", 
+            parametersp11.modulus, ", ",
+            parametersp11.residues.length, " residues and ",
+            parametersp11.residueTwinPairs.length, " twin pairs.");
 enum parametersp13 = genPgParameters(13);
-// TODO: Discover why this causes compilation errors.
-//immutable parametersp17 = genPGparameters!(17);
+pragma(msg, "prime 13 has modulus ", 
+            parametersp13.modulus, ", ",
+            parametersp13.residues.length, " residues and ",
+            parametersp13.residueTwinPairs.length, " twin pairs.");
+enum parametersp17 = genPgParameters(17);
+pragma(msg, "prime 17 has modulus ", 
+            parametersp17.modulus, ", ",
+            parametersp17.residues.length, " residues and ",
+            parametersp17.residueTwinPairs.length, " twin pairs.");
 
 // Global parameters
 shared uint pcnt;             // Number of primes from r1..sqrt(N)
@@ -144,23 +190,21 @@ void selectPg(ulong num) {
   } else if (num < 35_500_000_000uL) {
     pgParameters = parametersp11;
     bn = 64;
-  } else /*if (num < 15_000_000_000_000uL)*/ {
+  } else if (num < 15_000_000_000_000uL) {
     pgParameters = parametersp13;
     if      (num > 7_000_000_000_000uL) { bn = 384; }
     else if (num > 2_500_000_000_000uL) { bn = 320; }
     else if (num >   250_000_000_000uL) { bn = 196; }
     else {bn = 96;}
     }
-  /* else {
-    // TODO: Fix when parametersp17 is properly computed.
-    // pgParameters = PgParameters(parametersp17);
-    pgParameters = parametersp13;
+  else {
+    pgParameters = parametersp17;
     bn = 384;
-  }*/
+  }
   // Initialize parameters for selected PG.
   modpg    = pgParameters.modulus;
-  rescnt   = cast(uint) pgParameters.residueCount;
-  pairscnt = cast(uint) pgParameters.twinPairsCount;
+  rescnt   = cast(uint) pgParameters.residues.length;
+  pairscnt = cast(uint) pgParameters.residueTwinPairs.length;
   residues = pgParameters.residues;
   restwins = pgParameters.residueTwinPairs;
   resinvrs = pgParameters.residueInverses;
