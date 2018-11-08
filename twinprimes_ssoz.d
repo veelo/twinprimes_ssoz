@@ -17,8 +17,9 @@
  * https://mega.nz/#!yJxUEQgK!MY9dwjiWheE8tACtEeS0szduIvdBjiyTn4O6mMD_aZw
  * https://www.scribd.com/document/266461408/Primes-Utils-Handbook
  *
- * Originally coded by Vijay Nayar, and modifed by Jabari Zakiya.
- * Version Date: 2018/11/7
+ * Originally coded by Vijay Nayar, modifed by Jabari Zakiya and
+ * Bastiaan Veelo.
+ * Version Date: 2018/11/8
  */
 module twinprimes_ssoz;
 
