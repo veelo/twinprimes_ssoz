@@ -34,14 +34,15 @@ import std.range : iota;
 import std.stdio : readf, write, writeln;
 
 /// Compute modular inverse a^-1 of a to base b, e.g. a*(a^-1) mod b = 1.
-int modInv(int a0, int b0) {
+int modInv(int a0, int b0) pure
+{
   int a = a0;
   int b = b0;
   int x0 = 0;
   int result = 1;
   if (b == 1) {return result;}
   while (a > 1) {
-    auto q = a / b;
+    immutable q = a / b;
     a = a % b;
     swap(a, b);
     result -= q * x0;
@@ -62,8 +63,9 @@ struct PgParameters {
 }
 
 /// Creates constant parameters for given PrimeGenerator at compile time.
-PgParameters genPgParameters(int prime)() {
-  pragma(msg, "generating parameters for P", prime);
+PgParameters genPgParameters(int prime) pure
+{
+  //pragma(msg, "generating parameters for P", prime);
   uint[] primes = [2, 3, 5, 7, 11, 13, 17, 19, 23];
 
   // Compute PG's modulus.
@@ -101,10 +103,10 @@ PgParameters genPgParameters(int prime)() {
 }
 
 // Generate at compile time the parameters for PGs.
-enum parametersp5  = genPgParameters!(5);
-enum parametersp7  = genPgParameters!(7);
-enum parametersp11 = genPgParameters!(11);
-enum parametersp13 = genPgParameters!(13);
+enum parametersp5  = genPgParameters(5);
+enum parametersp7  = genPgParameters(7);
+enum parametersp11 = genPgParameters(11);
+enum parametersp13 = genPgParameters(13);
 // TODO: Discover why this causes compilation errors.
 //immutable parametersp17 = genPGparameters!(17);
 
